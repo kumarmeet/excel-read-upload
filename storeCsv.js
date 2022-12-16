@@ -3,8 +3,28 @@ const crypto = require("crypto");
 const path = require("path");
 const readXlsx = require("xlsx");
 const multer = require("multer");
+const moment = require("moment");
 const database = require("../../services/databaseServices");
 const { createSlug } = require("../../services/index");
+
+const removeLastPipeAndSplitHelper = (obj, key) => {
+  return obj[key].trim().slice(0, -1).trim().split(" | ");
+};
+
+const convertTextToHTMLHelper = (data, parentHTML, childHTML) => {
+  let inner = "";
+
+  for (const ele of data) {
+    inner += `<${childHTML}>${ele.trim()}</${childHTML}>`;
+  }
+
+  return `<${parentHTML}>${inner}</${parentHTML}>`;
+};
+
+const getFinalElements = (obj, key, parentHTML, childHTML) => {
+  let data = removeLastPipeAndSplitHelper(obj, key);
+  return convertTextToHTMLHelper(data, parentHTML, childHTML);
+};
 
 const uploadImage = () => {
   const storageConfig = multer.diskStorage({
@@ -318,8 +338,8 @@ const storeCsv = async (req, res) => {
       price: obj.product_price,
       selling_price: obj.product_selling_price,
       discount: obj.product_discount,
-      weight: obj.product_weigth_in_grams,
-      gross_weight: obj.product_gross_weight,
+      weight: obj.product_weight_in_grams,
+      gross_weight: obj.product_gross_weight_in_grams,
       description: obj.product_description,
       care: obj.product_care,
       disclaimer: obj.product_disclaimer,
@@ -330,7 +350,6 @@ const storeCsv = async (req, res) => {
       meta_description: obj.product_meta_description,
       meta_keywords: obj.product_meta_keywords,
       slug: obj.product_name,
-      order_no: obj.product_order_no,
       product_specification: obj.finalProductSpecification,
       faqs: obj.finalFaqs,
       gallery: obj.finalGalleryImages,
@@ -356,17 +375,16 @@ const storeCsv = async (req, res) => {
             discount: obj.discount,
             weight: obj.weight,
             gross_weight: obj.gross_weight,
-            description: obj.description,
-            care: obj.care,
-            disclaimer: obj.disclaimer,
-            packing_delivery: obj.packing_delivery,
-            terms_conditions: obj.terms_conditions,
+            description: getFinalElements(obj, "description", "ul", "li"),
+            care: getFinalElements(obj, "care", "ul", "li"),
+            disclaimer: getFinalElements(obj, "disclaimer", "ul", "li"),
+            packing_delivery: getFinalElements(obj, "packing_delivery", "ul", "li"),
+            terms_conditions: getFinalElements(obj, "terms_conditions", "ul", "li"),
             featured_image: obj.featured_image,
             meta_title: obj.meta_title,
             meta_description: obj.meta_description,
             meta_keywords: obj.meta_keywords,
             slug: createSlug(obj.name),
-            order_no: obj.order_no,
             status: 1,
           };
         });
@@ -404,7 +422,6 @@ const storeCsv = async (req, res) => {
               meta_description: obj.meta_description,
               meta_keywords: obj.meta_keywords,
               slug: obj.slug,
-              order_no: obj.order_no,
               status: obj.status,
             },
             `WHERE id = ${isSku.id}`
@@ -416,10 +433,10 @@ const storeCsv = async (req, res) => {
           console.log(error);
         }
       } else {
-        const query = `INSERT INTO products (name, category_id, sku, quantity, price, selling_price, discount, weight, gross_weight, description, care, disclaimer, packing_delivery, terms_conditions, featured_image, meta_title, meta_description, meta_keywords, slug, order_no, status) values `;
+        const query = `INSERT INTO products (name, category_id, sku, quantity, price, selling_price, discount, weight, gross_weight, description, care, disclaimer, packing_delivery, terms_conditions, featured_image, meta_title, meta_description, meta_keywords, slug, status) values `;
         let subQuery = "";
 
-        subQuery += `('${obj.name}', ${obj.category_id}, '${obj.sku}', ${obj.quantity}, ${obj.price}, ${obj.selling_price}, ${obj.discount}, ${obj.weight}, ${obj.gross_weight}, '${obj.description}', '${obj.care}', '${obj.disclaimer}', '${obj.packing_delivery}', '${obj.terms_conditions}', '${obj.featured_image}', '${obj.meta_title}', '${obj.meta_description}', '${obj.meta_keywords}', '${obj.slug}', ${obj.order_no}, ${obj.status} ),`;
+        subQuery += `('${obj.name}', ${obj.category_id}, '${obj.sku}', ${obj.quantity}, ${obj.price}, ${obj.selling_price}, ${obj.discount}, ${obj.weight}, ${obj.gross_weight}, '${obj.description}', '${obj.care}', '${obj.disclaimer}', '${obj.packing_delivery}', '${obj.terms_conditions}', '${obj.featured_image}', '${obj.meta_title}', '${obj.meta_description}', '${obj.meta_keywords}', '${obj.slug}', ${obj.status} ),`;
         subQuery = query + subQuery.replace(/.$/, "");
 
         try {
@@ -443,15 +460,19 @@ const storeCsv = async (req, res) => {
     "product_specification"
   );
 
-  //insert data into product_specifications table
-  insertProductRealtedTableData(
-    productSpecificationTableData,
-    productIds,
-    "title",
-    "value",
-    "order_no",
-    "product_specifications"
-  );
+  try {
+    //insert data into product_specifications table
+    insertProductRealtedTableData(
+      productSpecificationTableData,
+      productIds,
+      "title",
+      "value",
+      "order_no",
+      "product_specifications"
+    );
+  } catch (error) {
+    console.log(error);
+  }
 
   //created data structure
   const productFaqsTableData = keyValueSpecificationAndFaqs(
@@ -462,16 +483,19 @@ const storeCsv = async (req, res) => {
     "faqs"
   );
 
-  // //insert data into product_faqs table
-  insertProductRealtedTableData(
-    productFaqsTableData,
-    productIds,
-    "question",
-    "answer",
-    "order_no",
-    "product_faqs"
-  );
-
+  try {
+    // //insert data into product_faqs table
+    insertProductRealtedTableData(
+      productFaqsTableData,
+      productIds,
+      "question",
+      "answer",
+      "order_no",
+      "product_faqs"
+    );
+  } catch (error) {
+    console.log(error);
+  }
   //created data structure
   const productGalleryTableData = keyValueSpecificationAndFaqs(
     finalData,
@@ -481,15 +505,19 @@ const storeCsv = async (req, res) => {
     "gallery"
   );
 
-  //insert data into product_images table
-  insertProductRealtedTableData(
-    productGalleryTableData,
-    productIds,
-    "image",
-    false,
-    false,
-    "product_images"
-  );
+  try {
+    //insert data into product_images table
+    insertProductRealtedTableData(
+      productGalleryTableData,
+      productIds,
+      "image",
+      false,
+      false,
+      "product_images"
+    );
+  } catch (error) {
+    console.log(error);
+  }
 
   //created data structure
   const productPartsTableData = keyValueSpecificationAndFaqs(
@@ -500,15 +528,19 @@ const storeCsv = async (req, res) => {
     "productParts"
   );
 
-  // //insert data into product_faqs table
-  insertProductRealtedTableData(
-    productPartsTableData,
-    productIds,
-    "image",
-    "title",
-    "description",
-    "product_parts"
-  );
+  try {
+    // //insert data into product_faqs table
+    insertProductRealtedTableData(
+      productPartsTableData,
+      productIds,
+      "image",
+      "title",
+      "description",
+      "product_parts"
+    );
+  } catch (error) {
+    console.log(error);
+  }
 
   //delete file after all data processing completed
   fs.unlinkSync(finalFilePath);
@@ -517,6 +549,7 @@ const storeCsv = async (req, res) => {
   res.redirect(adminUrl + "/product");
 };
 
+//saving only products table data
 const downloadCsvFile = async (req, res) => {
   const products = await database.executeQuery("SELECT * FROM products");
 
@@ -535,11 +568,13 @@ const downloadCsvFile = async (req, res) => {
         product_selling_price: obj.selling_price,
         product_discount: obj.discount,
         product_weigth_in_grams: obj.weight,
+        product_gross_weight: obj.gross_weight,
         product_description: obj.description,
         product_care: obj.care,
         product_disclaimer: obj.disclaimer,
         product_packing_delivery: obj.packing_delivery,
         product_terms_conditions: obj.terms_conditions,
+        product_featured_img: obj.featured_image,
         // product_specification: await database.getMultipleRowsQuery(
         //   `SELECT title, value, order_no FROM product_specifications WHERE product_id = ${obj.id}`
         // ),
@@ -608,7 +643,11 @@ const downloadCsvFile = async (req, res) => {
   const workBook = readXlsx.utils.book_new();
 
   readXlsx.utils.book_append_sheet(workBook, workSheet, "Sheet 1");
-  readXlsx.writeFile(workBook, "sample.xlsx");
+  const fileName = `${moment().format(
+    "DD-MM-YYYY"
+  )}-${crypto.randomUUID()}.xlsx`;
+
+  readXlsx.writeFile(workBook, fileName);
 
   // const filePath = path.join(__dirname, "../../"); //absolute path
   // const finalFilePath = filePath + "sample.xlsx";
@@ -627,8 +666,10 @@ const downloadCsvFile = async (req, res) => {
   // );
 
   // readXlsx.writeFile(workbook, "sample.xlsx");
-
-  res.redirect(adminUrl + "/product");
+  const filePath = path.join(__dirname, "..", "..", fileName);
+  res.download(filePath, (err) => {
+    err ? console.log(err) : fs.unlinkSync(filePath);
+  });
 };
 
 module.exports = {
